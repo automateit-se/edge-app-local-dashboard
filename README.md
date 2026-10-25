@@ -52,7 +52,7 @@ The same dashboard and widgets. Locally there is no sign-in to IoT Open and no l
 
 ## Requirements
 
-- An IoT Open edge client: an IoT Open gateway, or the IoT Open Docker Edge Client. In Docker the app's port has to be published to reach it from the network.
+- An IoT Open edge client: an IoT Open gateway, or the IoT Open Docker Edge Client. In Docker the app's port has to be published to reach it from the network: with [App Management](https://github.com/automateit-se/appmanagement) 0.1.9 or later under *Edge client → Publicerade portar* (the server needs `EDGE_PORT_RANGE`), which also keeps the app's data when the edge client is updated.
 - Internet the first time the app starts (to download the dashboard), not afterwards.
 - IoT Open Dashboard 0.11.0 or later (the first release with `iotopen-dashboard-local.html`).
 
