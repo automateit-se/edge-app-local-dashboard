@@ -1,0 +1,24 @@
+{
+  "author": "AutomateIT",
+  "license": "MIT",
+  "input": {
+    "port": { "type": "number", "name": "Port", "description": "Porten dashboarden visas på, t.ex. http://<edge clientens adress>:8090", "default": 8090, "min": 1024, "max": 65535, "required": true },
+    "networks": { "type": "text", "name": "Tillåtna nätverk", "description": "Kommaseparerat, t.ex. 192.168.1.0/24. Tomt = alla som når edge clienten.", "validator": "^\\s*([0-9.]+(/[0-9]{1,2})?\\s*(,\\s*[0-9.]+(/[0-9]{1,2})?\\s*)*)?$", "on_error": "Ange nätverk som 192.168.1.0/24, kommaseparerade" },
+    "access": { "type": "option", "name": "Åtkomst", "description": "Öppen: alla på nätverket kan se och styra. PIN: alla kan se, styrning kräver PIN-kod. Lösenord: allt kräver lösenord.", "values": { "open": "Öppen", "pin": "PIN-kod för styrning", "password": "Lösenord för allt" }, "default": "open" },
+    "secret": { "type": "password", "name": "PIN-kod eller lösenord", "description": "Används för Åtkomst PIN-kod eller Lösenord. Skickas okrypterat på det lokala nätverket, så använd inte ett lösenord som används på annat ställe." },
+    "control": { "type": "toggle", "name": "Tillåt styrning", "description": "Av = bara visning, brytare och reglage skickar inget.", "default": true },
+    "title": { "type": "text", "name": "Namn i webbläsaren", "description": "Visas i headern och på fliken.", "default": "Dashboard" },
+    "pages": { "type": "text", "name": "Sidor", "description": "Vilka sidor som visas, namn eller id kommaseparerat. Tomt = alla." },
+    "start_page": { "type": "text", "name": "Startsida", "description": "Sidan som visas först (namn eller id). Tomt = första sidan." },
+    "exclude": { "type": "text", "name": "Widgettyper som inte visas", "description": "Kommaseparerat, t.ex. tracker (kartan behöver internet för bakgrunden).", "default": "tracker" },
+    "kiosk": { "type": "toggle", "name": "Kioskläge", "description": "Ingen header, för en väggskärm.", "default": false },
+    "history_hours": { "type": "number", "name": "Lokal historik (timmar)", "description": "Hur länge appen sparar värden själv, för grafer när IoT Open inte nås.", "default": 48, "min": 1, "max": 168 },
+    "api_key": { "type": "password", "name": "API-nyckel (valfri)", "description": "Behövs tills edge clienten själv får läsa installationens filer, metadata och logg. Skapa en egen användare som bara får läsa den här installationen och använd dess nyckel." },
+    "dashboard_url": { "type": "text", "name": "Dashboardens adress", "description": "HTML-filen som laddas ned när appen startar. Tomt = senaste versionen från GitHub." }
+  },
+  "guide": [
+    { "id": "stage_1", "title": "Visning", "description": "Dashboarden ritas i molnet som vanligt. Här väljs vad den här skärmen eller surfplattan visar.", "input_fields": ["port", "title", "pages", "start_page", "exclude", "kiosk"] },
+    { "id": "stage_2", "title": "Åtkomst", "description": "Vem på det lokala nätverket som får se och styra.", "input_fields": ["networks", "access", "secret", "control"] },
+    { "id": "stage_3", "title": "Data", "description": "Layout, logotyp, bakgrundsbilder och historik läses från IoT Open och sparas på edge clienten.", "input_fields": ["api_key", "history_hours", "dashboard_url"] }
+  ]
+}

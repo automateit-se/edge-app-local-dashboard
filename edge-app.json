@@ -1,0 +1,6 @@
+{
+  "name": "Lokal dashboard",
+  "category": "visualization",
+  "short_description": "Visar installationens IoT Open Dashboard på det lokala nätverket, även utan internet.",
+  "tags": ["dashboard", "local", "kiosk"]
+}
