@@ -5,7 +5,7 @@ An IoT Open edge app that serves the [IoT Open Dashboard](https://github.com/aut
 ## How it works
 
 - The dashboard is **designed in the cloud** as today, in the IoT Open Dashboard. This app shows the same layout, pages, colours, logo and background images.
-- The app is installed and configured centrally like any other edge app: in IoT Open's own user interface, with [App Management](https://github.com/automateit-se/appmanagement) or through IoT Open's API. Each instance has its own settings, so two wall screens can show different pages.
+- The app is installed and configured centrally like any other edge app: with IoT Open's own Frontend, with [App Management](https://github.com/automateit-se/appmanagement) or through IoT Open's API. Each instance has its own settings, so two wall screens can show different pages.
 - On the edge client the app:
   - serves the dashboard on its own port. The dashboard is one HTML file, `iotopen-dashboard-local.html` from an IoT Open Dashboard release, downloaded when the app starts and kept on disk,
   - answers the dashboard like a read-only IoT Open for this one installation (REST and MQTT over WebSocket), so the dashboard is the same code as in the cloud,
