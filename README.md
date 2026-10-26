@@ -5,7 +5,7 @@ An IoT Open edge app that serves the [IoT Open Dashboard](https://github.com/aut
 ## How it works
 
 - The dashboard is **designed in the cloud** as today, in the IoT Open Dashboard. This app shows the same layout, pages, colours, logo and background images.
-- The app is installed and configured centrally with [App Management](https://github.com/automateit-se/appmanagement), like any other edge app. Each instance has its own settings, so two wall screens can show different pages.
+- The app is installed and configured centrally like any other edge app: in IoT Open's own user interface, with [App Management](https://github.com/automateit-se/appmanagement) or through IoT Open's API. Each instance has its own settings, so two wall screens can show different pages.
 - On the edge client the app:
   - serves the dashboard on its own port. The dashboard is one HTML file, `iotopen-dashboard-local.html` from an IoT Open Dashboard release, downloaded when the app starts and kept on disk,
   - answers the dashboard like a read-only IoT Open for this one installation (REST and MQTT over WebSocket), so the dashboard is the same code as in the cloud,
@@ -52,11 +52,26 @@ The same dashboard and widgets. Locally there is no sign-in to IoT Open and no l
 
 ## Requirements
 
-- An IoT Open edge client: an IoT Open gateway, or the IoT Open Docker Edge Client. In Docker the app's port has to be published to reach it from the network: with [App Management](https://github.com/automateit-se/appmanagement) 0.1.9 or later under *Edge client → Publicerade portar* (the server needs `EDGE_PORT_RANGE`), which also keeps the app's data when the edge client is updated.
+- An IoT Open edge client, run directly in Linux or in Docker (see below).
 - Internet the first time the app starts (to download the dashboard), not afterwards.
 - IoT Open Dashboard 0.11.0 or later (the first release with `iotopen-dashboard-local.html`).
+- The app installed on the installation in any way: IoT Open's own user interface, [App Management](https://github.com/automateit-se/appmanagement) or IoT Open's API.
 
-The app keeps its data in `/var/lib/iot-open/edge/local-dashboard/<instance id>/`: the dashboard file, the cached installation files and metadata, the latest values and the history.
+### Two ways to run the edge client, the same app
+
+The app, its settings and this documentation are the same in both cases. What differs is how its port reaches the network and where its data is kept.
+
+| | Directly in Linux, e.g. a Raspberry Pi 4 | In Docker, e.g. a Raspberry Pi 5 with App Management |
+|---|---|---|
+| Reached on | `http://<pi>:8090` directly | A published port, e.g. `http://<pi>:18010` |
+| Port | Open 8090 towards the local network in the Pi's firewall, if it has one | Published under *Edge client → Publicerade portar* in App Management 0.1.9 or later (`EDGE_PORT_RANGE`, `EDGE_PORT_BIND`). A container started by hand needs `-p 18010:8090` and a volume for `/var/lib/iot-open` |
+| The app's data | On the SD card or disk | The volume `iotopen-edge-<installation>-data`, kept when the edge client is updated (App Management 0.1.9 or later) |
+| Memory | The whole Pi | The container has 256 MB, plenty for the app |
+| Check first | The edge client's Lua runtime (`iotopen-rt`) needs lua-http and cqueues: run a test script before installing the app | Tested in IoT Open's edge client image |
+
+The app keeps its data in `/var/lib/iot-open/edge/local-dashboard/<instance id>/`: the dashboard file, the cached installation files and metadata, the latest values and the history. It is written every ten minutes; lower *Lokal historik* if the SD card should be spared.
+
+An architecture overview (in Swedish) is in [docs/IoT-Open-Local-Dashboard-arkitektur.pdf](docs/IoT-Open-Local-Dashboard-arkitektur.pdf).
 
 ## Security
 
