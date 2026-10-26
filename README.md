@@ -71,7 +71,7 @@ The app, its settings and this documentation are the same in both cases. What di
 
 ### Check an edge client first
 
-`tools/check.lua` checks, without installing anything, that an edge client can run the app: the Lua modules, that the port is free, that the data directory can be written, the local broker, what the edge client's own credentials may read from IoT Open, and that the dashboard can be downloaded from GitHub. Run it on the edge client (for a Docker edge client: inside the container, `docker exec -it <container> sh`):
+`tools/check.lua` checks, without installing anything, that an edge client can run the app: the Lua modules, that the port is free, that the data directory can be written, the local broker, what the edge client's own credentials may read from IoT Open, and that the dashboard can be downloaded from GitHub. Run it on the edge client. For an edge client in Docker, copy it into the container and run it there: `sudo docker cp check.lua iotopen-edge-<installation>:/tmp/ && sudo docker exec iotopen-edge-<installation> iotopen-rt /tmp/check.lua` (the port check then tests the port inside the container).
 
 ```
 curl -fsSLO https://raw.githubusercontent.com/automateit-se/edge-app-local-dashboard/main/tools/check.lua
