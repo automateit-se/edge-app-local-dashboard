@@ -88,7 +88,7 @@ It prints *OK*, *FEL* or *INFO* per check and never prints credentials, values o
 
 The app keeps its data in `/var/lib/iot-open/edge/local-dashboard/<instance id>/`: the dashboard file, the cached installation files and metadata, the latest values and the history. It is written every ten minutes; lower *Lokal historik* if the SD card should be spared.
 
-An architecture overview (in Swedish) is in [docs/IoT-Open-Local-Dashboard-arkitektur.pdf](docs/IoT-Open-Local-Dashboard-arkitektur.pdf).
+An architecture overview is in [docs/IoT-Open-Local-Dashboard-architecture.pdf](docs/IoT-Open-Local-Dashboard-architecture.pdf).
 
 ## Security
 
