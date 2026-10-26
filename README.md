@@ -67,7 +67,24 @@ The app, its settings and this documentation are the same in both cases. What di
 | Port | Open 8090 towards the local network in the Pi's firewall, if it has one | Published under *Edge client → Publicerade portar* in App Management 0.1.9 or later (`EDGE_PORT_RANGE`, `EDGE_PORT_BIND`). A container started by hand needs `-p 18010:8090` and a volume for `/var/lib/iot-open` |
 | The app's data | On the SD card or disk | The volume `iotopen-edge-<installation>-data`, kept when the edge client is updated (App Management 0.1.9 or later) |
 | Memory | The whole Pi | The container has 256 MB, plenty for the app |
-| Check first | The edge client's Lua runtime (`iotopen-rt`) needs lua-http and cqueues: run a test script before installing the app | Tested in IoT Open's edge client image |
+| Check first | Run `tools/check.lua` (below): the Lua runtime needs lua-http and cqueues | Tested in IoT Open's edge client image |
+
+### Check an edge client first
+
+`tools/check.lua` checks, without installing anything, that an edge client can run the app: the Lua modules, that the port is free, that the data directory can be written, the local broker, what the edge client's own credentials may read from IoT Open, and that the dashboard can be downloaded from GitHub. Run it on the edge client (for a Docker edge client: inside the container, `docker exec -it <container> sh`):
+
+```
+curl -fsSLO https://raw.githubusercontent.com/automateit-se/edge-app-local-dashboard/main/tools/check.lua
+sudo iotopen-rt check.lua          # or: sudo iotopen-rt check.lua 8091 to check another port
+```
+
+To also check an API key, start the line with a space so that it is not saved in the shell history:
+
+```
+ sudo API_KEY=<key> iotopen-rt check.lua
+```
+
+It prints *OK*, *FEL* or *INFO* per check and never prints credentials, values or file contents. *INFO* for the installation's metadata, files and history with the edge client's own credentials means that the app needs an API key for those.
 
 The app keeps its data in `/var/lib/iot-open/edge/local-dashboard/<instance id>/`: the dashboard file, the cached installation files and metadata, the latest values and the history. It is written every ten minutes; lower *Lokal historik* if the SD card should be spared.
 
