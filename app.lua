@@ -21,7 +21,7 @@ local basexx = require("basexx")
 local mqttm = require("ev.mqtt")
 local ev = require("ev")
 
-local VERSION = "0.1.1"
+local VERSION = "0.1.2"
 local DEFAULT_DASHBOARD = "https://github.com/automateit-se/iotopen-dashboard/releases/latest/download/iotopen-dashboard-local.html"
 
 -- ---- settings ------------------------------------------------------------------------------------------------
@@ -196,36 +196,54 @@ rebuildTracked()
 
 local publishToClients -- set further down
 
+-- The sync functions return true when they are done: read, or refused by IoT Open (a missing permission is not
+-- something a new attempt fixes). false = IoT Open could not be reached or answered with an error: try again later.
+local function done(st) return st == 401 or st == 403 end
+
 local function syncInstallation()
-  local body = api("installation", "/api/v2/installation/" .. IID)
+  local body, st = api("installation", "/api/v2/installation/" .. IID)
   local d = decode(body)
   if type(d) == "table" and d.id then
     d.client_id = d.client_id or tonumber(CID)
     inst = d
     save("installation.json", d)
     publishToClients("evt/installation/updated", "{}")
+    return true
   end
+  return done(st)
 end
 
 local function safeHash(h) return type(h) == "string" and h:match("^[%w]+$") and h or nil end
 
 local function syncFiles()
-  local body = api("files", "/api/v2/file/installation/" .. IID)
+  local body, st = api("files", "/api/v2/file/installation/" .. IID)
   local list_ = decode(body)
-  if type(list_) ~= "table" then return end
-  local keep, have = {}, {}
+  if type(list_) ~= "table" then return done(st) end
+  local keep, have, complete = {}, {}, true
   for _, f in ipairs(list_) do
     local h = safeHash(f.hash)
     if h and tostring(f.name):match("^dashboard%-") then
       local p = DIR .. "/files/" .. h
       if not readfile(p) then
         local data, st = api("files", "/api/v2/file/download/" .. h)
-        if data then writefile(p, data) else log.e("file %s: %s", tostring(f.name), tostring(st)) end
+        if data then
+          writefile(p, data)
+        else
+          log.e("file %s: %s", tostring(f.name), tostring(st))
+          complete = false
+        end
       end
       if readfile(p) then
         keep[#keep + 1] = f
         have[h] = true
       end
+    end
+  end
+  -- a file that could not be downloaded keeps the copy saved before, if there is one
+  if not complete then
+    for _, f in ipairs(files) do
+      local h = safeHash(f.hash)
+      if h and not have[h] and readfile(DIR .. "/files/" .. h) then keep[#keep + 1] = f have[h] = true end
     end
   end
   for _, f in ipairs(files) do
@@ -235,11 +253,13 @@ local function syncFiles()
   files = keep
   save("files.json", files)
   publishToClients("evt/file/updated", "{}")
+  return complete
 end
 
 local function syncStatus()
-  local d = decode((api("status", "/api/v2/status/" .. IID)))
-  if type(d) ~= "table" then return end
+  local body, st = api("status", "/api/v2/status/" .. IID)
+  local d = decode(body)
+  if type(d) ~= "table" then return done(st) end
   for _, e in ipairs(d) do
     local t = tostring(e.topic or ""):gsub("^%d+/", "")
     local old = latest[t]
@@ -247,6 +267,7 @@ local function syncStatus()
       latest[t] = { topic = t, value = e.value, msg = e.msg or "", timestamp = e.timestamp }
     end
   end
+  return true
 end
 
 --- The dashboard itself: downloaded at start, the copy on disk is used when that fails.
@@ -255,9 +276,11 @@ local function syncDashboard()
   if st == 200 and body and #body > 1000 and body:find("<html", 1, true) then
     writefile(DIR .. "/dashboard.html", body)
     log.i("dashboard downloaded (%d kB)", #body // 1024)
-  else
-    log.e("could not download the dashboard (%s), %s", tostring(st), readfile(DIR .. "/dashboard.html") and "using the saved copy" or "none saved yet")
+    return true
   end
+  local saved = readfile(DIR .. "/dashboard.html") ~= nil
+  log.e("could not download the dashboard (%s), %s", tostring(st), saved and "using the saved copy" or "none saved yet")
+  return saved
 end
 
 -- ---- local history ------------------------------------------------------------------------------------------------
@@ -674,29 +697,87 @@ local function later(name, secs, fn)
   end)
 end
 
+-- ---- catching up with IoT Open --------------------------------------------------------------------------------
+-- At start and whenever IoT Open can be reached again after an outage, everything that may have changed meanwhile
+-- is read again: the latest values, the installation's metadata, the dashboard files, and the dashboard itself when
+-- none is saved yet. The browsers are told when it is done and read it from the app. What could not be read is
+-- tried again after 30 s, 1, 2, 4 … at most 10 minutes, but only while the edge client is (or may be) connected:
+-- while the bridge says it is not, the next attempt waits for it to come back. Nothing is polled once up to date.
+
+local RETRY_FIRST, RETRY_MAX = 30, 600
+local sync = { running = false, again = false, delay = RETRY_FIRST, retry = nil, behind = true }
+local catchUp
+
+local function scheduleRetry()
+  if sync.retry then sync.retry:cancel() end
+  sync.retry = nil
+  if cloud.bridge == false then return end -- onBridge starts the next attempt
+  local wait = sync.delay
+  sync.delay = math.min(RETRY_MAX, sync.delay * 2)
+  sync.retry = timer:after(wait, function()
+    sync.retry = nil
+    spawn(catchUp, "trying again")
+  end)
+end
+
+catchUp = function(reason, dashboardTried)
+  if sync.running then
+    sync.again = true -- a second reason while one runs: one more round after it
+    return
+  end
+  sync.running = true
+  if sync.retry then sync.retry:cancel() sync.retry = nil end
+  local ok
+  repeat
+    sync.again = false
+    log.i("%s: reading the latest values, metadata and files from IoT Open", reason)
+    ok = true
+    if dashboardTried then
+      ok = readfile(DIR .. "/dashboard.html") ~= nil
+      dashboardTried = false
+    elseif not readfile(DIR .. "/dashboard.html") then
+      ok = syncDashboard()
+    end
+    local values = syncStatus()
+    ok = values and ok
+    ok = syncInstallation() and ok
+    ok = syncFiles() and ok
+    -- the dashboards re-read functions, devices and the latest values from the app on this event
+    if values then publishToClients("evt/functionx/updated", "{}") end
+  until not sync.again
+  sync.running = false
+  sync.behind = not ok
+  if ok then
+    sync.delay = RETRY_FIRST
+    log.i("up to date with IoT Open")
+  else
+    log.e("not everything could be read from IoT Open, trying again later")
+    scheduleRetry()
+  end
+  if cloud.refused.files then log.e("installation files are not readable: add an API key with read access") end
+end
+
 --- The edge client's MQTT bridge reports its own connection to IoT Open on <client id>/box/event/status
 --- (mosquitto's notification topic, retained, also on the local broker): 1 = connected, 0 = not. When it comes
---- back, what may have changed meanwhile is read again, once. No polling.
+--- back after an outage, or when an earlier attempt to read failed, the app catches up.
 local function onBridge(_, payload)
   local up = tostring(payload):match("^%s*1") ~= nil
   local was = cloud.bridge
   cloud.bridge = up
-  if up and was == false then
-    log.i("connected to IoT Open again, reading what may have changed")
-    spawn(function()
-      syncStatus()
-      syncInstallation()
-      syncFiles()
-    end)
+  -- the first status after start only tells the state: starting reads everything anyway
+  if up and (was == false or (was ~= nil and sync.behind and not sync.running and not sync.retry)) then
+    log.i("connected to IoT Open again")
+    spawn(catchUp, "connected again")
   elseif not up and was ~= false then
+    if sync.retry then sync.retry:cancel() sync.retry = nil end
     log.i("the edge client is not connected to IoT Open, showing saved data")
   end
 end
 
 local function onLocal(topic, payload)
   -- the dashboard re-reads these: tell it only once the local copy is up to date
-  if topic == "evt/file/updated" then return later("files", 2, syncFiles) end
-  if topic == "evt/installation/updated" then return later("installation", 2, syncInstallation) end
+  if topic == "evt/file/updated" then return later("files", 2, function() if not syncFiles() then sync.behind = true scheduleRetry() end end) end
+  if topic == "evt/installation/updated" then return later("installation", 2, function() if not syncInstallation() then sync.behind = true scheduleRetry() end end) end
   if topic == "evt/functionx/updated" or topic == "evt/devicex/updated" or topic == "evt/edge_app/updated" then return end
   local d = decode(payload)
   local value, msg, ts
@@ -734,12 +815,10 @@ function onStart()
   mq:bind("evt/#", onLocal)
   mq:sub(CID .. "/box/event/status", 0)
   mq:bind(CID .. "/box/event/status", onBridge)
+  -- the dashboard is downloaded at every start (a new release); catching up reads the rest
   spawn(function()
     syncDashboard()
-    syncStatus()
-    syncInstallation()
-    syncFiles()
-    if cloud.refused.files then log.e("installation files are not readable: add an API key with read access") end
+    catchUp("starting", true)
   end)
   every(600, persist)
 end
