@@ -21,7 +21,7 @@ local basexx = require("basexx")
 local mqttm = require("ev.mqtt")
 local ev = require("ev")
 
-local VERSION = "0.1.0"
+local VERSION = "0.1.1"
 local DEFAULT_DASHBOARD = "https://github.com/automateit-se/iotopen-dashboard/releases/latest/download/iotopen-dashboard-local.html"
 
 -- ---- settings ------------------------------------------------------------------------------------------------
@@ -129,7 +129,14 @@ end
 
 -- ---- IoT Open over REST -------------------------------------------------------------------------------------
 
-local cloud = { ok = nil, at = 0, auth = {}, refused = {} } -- auth[kind] = "gw" | "key"
+local cloud = { ok = nil, at = 0, auth = {}, refused = {}, bridge = nil } -- auth[kind] = "gw" | "key"
+
+--- Whether IoT Open can be reached: the MQTT bridge's own state when known (a REST call that timed out while the
+--- bridge is up does not count), else the last REST call.
+local function cloudReachable()
+  if cloud.bridge ~= nil then return cloud.bridge end
+  return cloud.ok
+end
 
 local function fetch(url, headers, timeout)
   local req = http_request.new_from_uri(url)
@@ -597,7 +604,7 @@ local function route(stream, req, ip)
   if p == "/local/login" and method == "POST" then return login(stream, ip) end
   if p == "/local/status" then
     return replyJson(stream, 200, {
-      cloud = cloud.ok, cloud_at = cloud.at, files = cloud.refused.files and "refused" or "ok",
+      cloud = cloudReachable(), bridge = cloud.bridge, cloud_at = cloud.at, files = cloud.refused.files and "refused" or "ok",
       key = CONF.key ~= "", session = validSession(req:get("x-api-key")), version = VERSION,
     })
   end
@@ -667,6 +674,25 @@ local function later(name, secs, fn)
   end)
 end
 
+--- The edge client's MQTT bridge reports its own connection to IoT Open on <client id>/box/event/status
+--- (mosquitto's notification topic, retained, also on the local broker): 1 = connected, 0 = not. When it comes
+--- back, what may have changed meanwhile is read again, once. No polling.
+local function onBridge(_, payload)
+  local up = tostring(payload):match("^%s*1") ~= nil
+  local was = cloud.bridge
+  cloud.bridge = up
+  if up and was == false then
+    log.i("connected to IoT Open again, reading what may have changed")
+    spawn(function()
+      syncStatus()
+      syncInstallation()
+      syncFiles()
+    end)
+  elseif not up and was ~= false then
+    log.i("the edge client is not connected to IoT Open, showing saved data")
+  end
+end
+
 local function onLocal(topic, payload)
   -- the dashboard re-reads these: tell it only once the local copy is up to date
   if topic == "evt/file/updated" then return later("files", 2, syncFiles) end
@@ -706,6 +732,8 @@ function onStart()
   mq:sub("evt/#", 0)
   mq:bind("obj/#", onLocal)
   mq:bind("evt/#", onLocal)
+  mq:sub(CID .. "/box/event/status", 0)
+  mq:bind(CID .. "/box/event/status", onBridge)
   spawn(function()
     syncDashboard()
     syncStatus()

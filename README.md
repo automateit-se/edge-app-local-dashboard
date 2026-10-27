@@ -12,6 +12,7 @@ An IoT Open edge app that serves the [IoT Open Dashboard](https://github.com/aut
   - reads functions and devices from the edge client's own copies and live values from the edge client's broker,
   - reads the layout file, logo and background images (installation files named `dashboard-*`), the installation's metadata and history from IoT Open over REST, and keeps a copy on disk,
   - learns from MQTT when something changed (`evt/file/updated`, `evt/installation/updated`) and only then reads it again: nothing is polled,
+- follows the edge client's own connection to IoT Open (its MQTT bridge reports it on `<client id>/box/event/status`), shows it in the dashboard, and reads again what may have changed when the connection is back,
   - keeps its own history of the functions' values (default 48 hours), used for graphs when IoT Open cannot be reached.
 - Locally there is no IoT Open sign-in. Access is open, with a PIN for control, or with a password for everything, as set on the app.
 
