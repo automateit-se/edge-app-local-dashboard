@@ -13,7 +13,8 @@ An IoT Open edge app that serves the [IoT Open Dashboard](https://github.com/aut
   - reads the layout file, logo and background images (installation files named `dashboard-*`), the installation's metadata and history from IoT Open over REST, and keeps a copy on disk,
   - learns from MQTT when something changed (`evt/file/updated`, `evt/installation/updated`) and only then reads it again: nothing is polled,
 - follows the edge client's own connection to IoT Open (its MQTT bridge reports it on `<client id>/box/event/status`) and shows it in the dashboard,
-- catches up when IoT Open can be reached again after an outage, and at start: the latest values, the installation's metadata, the dashboard files and, if none is saved yet, the dashboard itself are read again, and the screens update without being reloaded. What could not be read is tried again after 30 s, 1, 2, 4 … at most 10 minutes while the edge client is connected; a missing permission is not retried,
+- catches up when IoT Open can be reached again after an outage, and at start: the latest values, the installation's metadata, the dashboard files and, if none is saved yet, the dashboard itself are read again, and the screens update without being reloaded. While the edge client is connected every change comes as an MQTT event, so nothing is polled; if reading fails although the connection is up, the next event from IoT Open or the next reconnect reads everything again,
+- passes the bridge's status on to the screens over MQTT, so the dashboard shows *Live* or *Lokalt* without asking,
   - keeps its own history of the functions' values (default 48 hours), used for graphs when IoT Open cannot be reached.
 - Locally there is no IoT Open sign-in. Access is open, with a PIN for control, or with a password for everything, as set on the app.
 

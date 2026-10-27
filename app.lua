@@ -469,7 +469,7 @@ local function onPacket(c, kind, flags, body)
     enqueue(c, packet(0x20, "\0\0"))
   elseif kind == 8 or kind == 10 then -- SUBSCRIBE / UNSUBSCRIBE
     local id = body:sub(1, 2)
-    local pos, granted = 3, {}
+    local pos, granted, retained = 3, {}, {}
     while pos <= #body do
       local f
       f, pos = string.unpack(">s2", body, pos)
@@ -477,11 +477,14 @@ local function onPacket(c, kind, flags, body)
         pos = pos + 1
         c.filters[f] = true
         granted[#granted + 1] = "\0"
+        local bt = CID .. "/box/event/status"
+        if cloud.bridge ~= nil and mqttm.match(f, bt) then retained[#retained + 1] = packet(0x31, mstr(bt) .. (cloud.bridge and "1" or "0")) end
       else
         c.filters[f] = nil
       end
     end
     enqueue(c, packet(kind == 8 and 0x90 or 0xB0, id .. table.concat(granted)))
+    for _, r in ipairs(retained) do enqueue(c, r) end
   elseif kind == 3 then -- PUBLISH from the browser: control, only when allowed
     local topic, pos = string.unpack(">s2", body)
     if (flags >> 1) & 3 > 0 then pos = pos + 2 end
@@ -698,27 +701,15 @@ local function later(name, secs, fn)
 end
 
 -- ---- catching up with IoT Open --------------------------------------------------------------------------------
--- At start and whenever IoT Open can be reached again after an outage, everything that may have changed meanwhile
--- is read again: the latest values, the installation's metadata, the dashboard files, and the dashboard itself when
--- none is saved yet. The browsers are told when it is done and read it from the app. What could not be read is
--- tried again after 30 s, 1, 2, 4 … at most 10 minutes, but only while the edge client is (or may be) connected:
--- while the bridge says it is not, the next attempt waits for it to come back. Nothing is polled once up to date.
+-- While the edge client is connected, every change comes as an MQTT event (evt/file/updated, evt/installation/
+-- updated, the values themselves). What can be missed is only what happened while it was not, so everything is
+-- read again at start and when the bridge reports the connection back: the latest values, the installation's
+-- metadata, the dashboard files, and the dashboard itself when none is saved yet. The browsers are told when it is
+-- done. Nothing is polled: when reading fails although the bridge is up, the next event from IoT Open (or the next
+-- reconnect) starts a new full round.
 
-local RETRY_FIRST, RETRY_MAX = 30, 600
-local sync = { running = false, again = false, delay = RETRY_FIRST, retry = nil, behind = true }
+local sync = { running = false, again = false, behind = true }
 local catchUp
-
-local function scheduleRetry()
-  if sync.retry then sync.retry:cancel() end
-  sync.retry = nil
-  if cloud.bridge == false then return end -- onBridge starts the next attempt
-  local wait = sync.delay
-  sync.delay = math.min(RETRY_MAX, sync.delay * 2)
-  sync.retry = timer:after(wait, function()
-    sync.retry = nil
-    spawn(catchUp, "trying again")
-  end)
-end
 
 catchUp = function(reason, dashboardTried)
   if sync.running then
@@ -726,7 +717,6 @@ catchUp = function(reason, dashboardTried)
     return
   end
   sync.running = true
-  if sync.retry then sync.retry:cancel() sync.retry = nil end
   local ok
   repeat
     sync.again = false
@@ -748,36 +738,36 @@ catchUp = function(reason, dashboardTried)
   sync.running = false
   sync.behind = not ok
   if ok then
-    sync.delay = RETRY_FIRST
     log.i("up to date with IoT Open")
   else
-    log.e("not everything could be read from IoT Open, trying again later")
-    scheduleRetry()
+    log.e("not everything could be read from IoT Open: read again at the next event or reconnect")
   end
   if cloud.refused.files then log.e("installation files are not readable: add an API key with read access") end
 end
 
 --- The edge client's MQTT bridge reports its own connection to IoT Open on <client id>/box/event/status
---- (mosquitto's notification topic, retained, also on the local broker): 1 = connected, 0 = not. When it comes
---- back after an outage, or when an earlier attempt to read failed, the app catches up.
-local function onBridge(_, payload)
+--- (mosquitto's notification topic, retained, also on the local broker): 1 = connected, 0 = not. It is passed on
+--- to the browsers (the dashboard shows Live / Lokalt from it), and when it comes back the app catches up.
+local function onBridge(topic, payload)
   local up = tostring(payload):match("^%s*1") ~= nil
   local was = cloud.bridge
   cloud.bridge = up
+  publishToClients(topic:sub(#CID + 2), payload)
   -- the first status after start only tells the state: starting reads everything anyway
-  if up and (was == false or (was ~= nil and sync.behind and not sync.running and not sync.retry)) then
+  if up and was == false then
     log.i("connected to IoT Open again")
     spawn(catchUp, "connected again")
   elseif not up and was ~= false then
-    if sync.retry then sync.retry:cancel() sync.retry = nil end
     log.i("the edge client is not connected to IoT Open, showing saved data")
   end
 end
 
 local function onLocal(topic, payload)
   -- the dashboard re-reads these: tell it only once the local copy is up to date
-  if topic == "evt/file/updated" then return later("files", 2, function() if not syncFiles() then sync.behind = true scheduleRetry() end end) end
-  if topic == "evt/installation/updated" then return later("installation", 2, function() if not syncInstallation() then sync.behind = true scheduleRetry() end end) end
+  -- after a round that failed, any event from IoT Open (it is reachable again) starts a full one
+  if sync.behind and not sync.running and topic:match("^evt/.+/updated$") then return later("catchup", 2, function() catchUp("IoT Open answers again") end) end
+  if topic == "evt/file/updated" then return later("files", 2, function() sync.behind = not syncFiles() end) end
+  if topic == "evt/installation/updated" then return later("installation", 2, function() sync.behind = not syncInstallation() end) end
   if topic == "evt/functionx/updated" or topic == "evt/devicex/updated" or topic == "evt/edge_app/updated" then return end
   local d = decode(payload)
   local value, msg, ts
