@@ -21,7 +21,7 @@ local basexx = require("basexx")
 local mqttm = require("ev.mqtt")
 local ev = require("ev")
 
-local VERSION = "0.1.2"
+local VERSION = "0.1.3"
 local DEFAULT_DASHBOARD = "https://github.com/automateit-se/iotopen-dashboard/releases/latest/download/iotopen-dashboard-local.html"
 
 -- ---- settings ------------------------------------------------------------------------------------------------
@@ -141,6 +141,8 @@ end
 local function fetch(url, headers, timeout)
   local req = http_request.new_from_uri(url)
   req.headers:upsert(":method", "GET")
+  -- IoT Open answers 404 to /api/v2/file/download/{hash} when no Accept header matches the file (lua-http sends none)
+  req.headers:upsert("accept", "*/*")
   for k, v in pairs(headers or {}) do req.headers:upsert(k, v) end
   local h, s = req:go(timeout or 15)
   if not h then return nil, 0 end
