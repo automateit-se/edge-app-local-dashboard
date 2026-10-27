@@ -90,6 +90,16 @@ The app keeps its data in `/var/lib/iot-open/edge/local-dashboard/<instance id>/
 
 An architecture overview is in [docs/IoT-Open-Local-Dashboard-architecture.pdf](docs/IoT-Open-Local-Dashboard-architecture.pdf).
 
+## Troubleshooting
+
+- **Nothing listens on the port, and edged logs `Unable to read appfile: /var/lib/iot-open/edge/configs/<id>: No such file or directory` every ten seconds.** edged writes the apps and their settings to `/var/lib/iot-open/edge/apps` and `/var/lib/iot-open/edge/configs` but does not create those directories, and some edge client installations have a directory literally named `{apps,configs}` instead. No edge app can start then, not only this one. Create them and restart edged:
+  ```
+  sudo mkdir -p /var/lib/iot-open/edge/apps /var/lib/iot-open/edge/configs
+  sudo systemctl restart edged
+  ```
+  `tools/check.lua` reports this. The app's own log lines start with `edge-app-<instance id>` (on a native edge client: `sudo journalctl -u edged`).
+- **The footer says that IoT Open cannot be reached, or the layout is missing.** Check the API key (run `tools/check.lua` with `API_KEY`) and that the installation has a dashboard saved in the cloud.
+
 ## Security
 
 Serve it on the local network only. The app speaks plain HTTP; a PIN or password travels unencrypted on the LAN, so do not reuse one used elsewhere, and never expose the port to the internet. Use *Allowed networks* to limit who can reach it. The app only reads from IoT Open; changes to the dashboard are made in the cloud.

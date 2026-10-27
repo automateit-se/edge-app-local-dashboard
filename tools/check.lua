@@ -60,7 +60,23 @@ end
 local IID = tostring(iot.installation_id or "")
 local CID = tostring(iot.client_id or "")
 
--- 3. the data directory -----------------------------------------------------------------------------------
+-- 3. edged's directories: it writes the apps and their settings there but does not create them, and some
+-- installations have one directory literally named "{apps,configs}" instead (a mkdir without brace expansion)
+do
+  local missing_dirs = {}
+  for _, d in ipairs({ "/var/lib/iot-open/edge/apps", "/var/lib/iot-open/edge/configs" }) do
+    local ok = os.rename(d, d)
+    if not ok then missing_dirs[#missing_dirs + 1] = d end
+  end
+  if #missing_dirs == 0 then
+    line(true, "edged: apps och configs", "finns")
+  else
+    line(false, "edged: apps och configs", "saknas, ingen edge-app kan starta. Rätta med:")
+    print("     sudo mkdir -p " .. table.concat(missing_dirs, " ") .. " && sudo systemctl restart edged")
+  end
+end
+
+-- 4. the data directory -----------------------------------------------------------------------------------
 do
   io.stdout:flush()
   os.execute("mkdir -p '" .. DATA .. "' 2>/dev/null")
@@ -92,7 +108,7 @@ local function get(url, headers, timeout)
 end
 
 cq:wrap(function()
-  -- 4. the port: a test server on all interfaces, answered from this machine
+  -- 5. the port: a test server on all interfaces, answered from this machine
   local srv = http_server.listen({
     host = "0.0.0.0", port = PORT, cq = cq,
     onstream = function(_, stream)
@@ -112,7 +128,7 @@ cq:wrap(function()
     srv:close()
   end
 
-  -- 5. the local broker (the app subscribes to obj/# and evt/#)
+  -- 6. the local broker (the app subscribes to obj/# and evt/#)
   local s = socket.connect({ host = "127.0.0.1", port = 1883 })
   local connack
   if s then
@@ -131,7 +147,7 @@ cq:wrap(function()
   end
   line(connack ~= nil and connack:sub(1, 1) == "\32" and connack:byte(4) == 0, "lokal MQTT-broker (127.0.0.1:1883)", connack and "svarar" or "svarar inte: körs edge clienten?")
 
-  -- 6. what the edge client's own credentials may read
+  -- 7. what the edge client's own credentials may read
   if iot.api and CID ~= "" then
     local basic = { authorization = "Basic " .. basexx.to_base64(CID .. ":" .. tostring(iot.mqtt_password)) }
     local now = os.time()
@@ -165,7 +181,7 @@ cq:wrap(function()
     end
   end
 
-  -- 7. the dashboard file on GitHub
+  -- 8. the dashboard file on GitHub
   local body, st = get(DASHBOARD, nil, 60)
   local okd = st == 200 and body and body:find("<html", 1, true)
   line(okd and true or false, "dashboarden från GitHub", okd and string.format("hämtad, %d kB", #body // 1024) or (st == 0 and "nås inte (internet, DNS eller certifikat?)" or "HTTP " .. st))
@@ -174,7 +190,7 @@ end)
 local ok, err = cq:loop(180)
 if not ok then line(false, "kontrollen", tostring(err)) end
 
--- 8. how the screens reach it -----------------------------------------------------------------------------
+-- 9. how the screens reach it -----------------------------------------------------------------------------
 local ips = io.popen("hostname -I 2>/dev/null")
 local addr = ips and (ips:read("a") or ""):match("(%d+%.%d+%.%d+%.%d+)")
 if ips then ips:close() end
