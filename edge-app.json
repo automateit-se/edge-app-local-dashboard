@@ -2,5 +2,10 @@
   "name": "Lokal dashboard",
   "category": "visualization",
   "short_description": "Visar installationens IoT Open Dashboard på det lokala nätverket, även utan internet.",
-  "tags": ["dashboard", "local", "kiosk"]
+  "description": "Visar installationens IoT Open Dashboard på det lokala nätverket, till exempel på väggskärmar och surfplattor, utan inloggning i IoT Open. Värden och styrning fungerar även utan internet.\n\n- Dashboarden designas i molnet som vanligt; appen visar samma layout, sidor, färger och bakgrundsbilder.\n- Appen svarar dashboarden som ett skrivskyddat IoT Open för den här installationen och läser värden från edge clientens egen broker.\n- Layout, bilder och historik läses från IoT Open och sparas lokalt, så dashboarden fungerar vidare om internet försvinner.\n- Åtkomst: öppen, PIN för styrning eller lösenord för allt.\n- Fungerar med edge clienten direkt i Linux (t.ex. Raspberry Pi 4) och i Docker (t.ex. Raspberry Pi 5 med App Management).\n\nHela dokumentationen, inställningar och felsökning: https://github.com/automateit-se/edge-app-local-dashboard",
+  "tags": [
+    "dashboard",
+    "local",
+    "kiosk"
+  ]
 }

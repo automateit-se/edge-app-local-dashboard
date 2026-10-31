@@ -21,7 +21,7 @@ local basexx = require("basexx")
 local mqttm = require("ev.mqtt")
 local ev = require("ev")
 
-local VERSION = "0.1.3"
+local VERSION = "0.1.4"
 local DEFAULT_DASHBOARD = "https://github.com/automateit-se/iotopen-dashboard/releases/latest/download/iotopen-dashboard-local.html"
 
 -- ---- settings ------------------------------------------------------------------------------------------------
