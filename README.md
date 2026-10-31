@@ -109,7 +109,7 @@ Serve it on the local network only. The app speaks plain HTTP; a PIN or password
 
 ## Development
 
-`app.lua` is the whole app (IoT Open's limit is 64 kB), `app.json` its settings and `edge-app.json` its description in App Management. It runs in the edge client's Lua runtime (`iotopen-rt`, Lua 5.3 with lua-http and cqueues). The app was tested by running it in an IoT Open edge client image against the IoT Open Dashboard's mock server.
+`app.lua` is the whole app (IoT Open's limit is 64 kB), `app.json` its settings and `edge-app.json` its name and a short description for IoT Open and App Management (the README is too long for IoT Open's description field). It runs in the edge client's Lua runtime (`iotopen-rt`, Lua 5.3 with lua-http and cqueues). The app was tested by running it in an IoT Open edge client image against the IoT Open Dashboard's mock server.
 
 ## License
 
