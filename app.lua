@@ -21,7 +21,7 @@ local basexx = require("basexx")
 local mqttm = require("ev.mqtt")
 local ev = require("ev")
 
-local VERSION = "0.1.4"
+local VERSION = "0.1.5"
 local DEFAULT_DASHBOARD = "https://github.com/automateit-se/iotopen-dashboard/releases/latest/download/iotopen-dashboard-local.html"
 
 -- ---- settings ------------------------------------------------------------------------------------------------
@@ -217,6 +217,20 @@ end
 
 local function safeHash(h) return type(h) == "string" and h:match("^[%w]+$") and h or nil end
 
+-- Only the kinds of file the dashboard reads are kept: its layout (JSON) and images. Whoever may write the
+-- installation's files chooses their content, so nothing else (a web page, a script) is ever served here.
+local FILE_KINDS = { json = true, png = true, jpg = true, jpeg = true, gif = true, webp = true, svg = true, avif = true, bmp = true }
+local function wantedFile(name)
+  local ext = tostring(name):match("^dashboard%-.+%.(%w+)$")
+  return ext ~= nil and FILE_KINDS[ext:lower()] == true
+end
+-- a list cached by an earlier version may hold other files: they are not served (and removed at the next sync)
+do
+  local kept = {}
+  for _, f in ipairs(files) do if wantedFile(f.name) then kept[#kept + 1] = f end end
+  files = kept
+end
+
 local function syncFiles()
   local body, st = api("files", "/api/v2/file/installation/" .. IID)
   local list_ = decode(body)
@@ -224,7 +238,7 @@ local function syncFiles()
   local keep, have, complete = {}, {}, true
   for _, f in ipairs(list_) do
     local h = safeHash(f.hash)
-    if h and tostring(f.name):match("^dashboard%-") then
+    if h and wantedFile(f.name) then
       local p = DIR .. "/files/" .. h
       if not readfile(p) then
         local data, st = api("files", "/api/v2/file/download/" .. h)
@@ -562,6 +576,13 @@ end
 
 local function replyJson(stream, status, t) reply(stream, status, json:encode(t)) end
 
+local DOWNLOAD_HEADERS = {
+  ["content-disposition"] = "attachment",
+  ["content-security-policy"] = "default-src 'none'; sandbox; frame-ancestors 'none'",
+  ["cross-origin-resource-policy"] = "same-origin",
+  ["referrer-policy"] = "no-referrer",
+}
+
 local function localConfig()
   return {
     appTitle = CONF.title,
@@ -657,7 +678,9 @@ local function route(stream, req, ip)
     for _, f in ipairs(files) do
       if f.hash == h then
         local data = readfile(DIR .. "/files/" .. h)
-        if data then return reply(stream, 200, data, f.mime or "application/octet-stream") end
+        -- as plain bytes to download, with a policy that lets nothing in it run: never a page on this origin.
+        -- The dashboard reads files with fetch() and sets the type itself.
+        if data then return reply(stream, 200, data, "application/octet-stream", DOWNLOAD_HEADERS) end
       end
     end
   end

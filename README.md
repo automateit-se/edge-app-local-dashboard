@@ -10,7 +10,7 @@ An IoT Open edge app that serves the [IoT Open Dashboard](https://github.com/aut
   - serves the dashboard on its own port. The dashboard is one HTML file, `iotopen-dashboard-local.html` from an IoT Open Dashboard release, downloaded when the app starts and kept on disk,
   - answers the dashboard like a read-only IoT Open for this one installation (REST and MQTT over WebSocket), so the dashboard is the same code as in the cloud,
   - reads functions and devices from the edge client's own copies and live values from the edge client's broker,
-  - reads the layout file, logo and background images (installation files named `dashboard-*`), the installation's metadata and history from IoT Open over REST, and keeps a copy on disk,
+  - reads the layout file, logo and background images (installation files named `dashboard-*` that are JSON or images: `.json`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.avif`, `.bmp`), the installation's metadata and history from IoT Open over REST, and keeps a copy on disk,
   - learns from MQTT when something changed (`evt/file/updated`, `evt/installation/updated`) and only then reads it again: nothing is polled,
 - follows the edge client's own connection to IoT Open (its MQTT bridge reports it on `<client id>/box/event/status`) and shows it in the dashboard,
 - catches up when IoT Open can be reached again after an outage, and at start: the latest values, the installation's metadata, the dashboard files and, if none is saved yet, the dashboard itself are read again, and the screens update without being reloaded. While the edge client is connected every change comes as an MQTT event, so nothing is polled; if reading fails although the connection is up, the next event from IoT Open or the next reconnect reads everything again,
@@ -106,6 +106,8 @@ An architecture overview is in [docs/IoT-Open-Local-Dashboard-architecture.pdf](
 ## Security
 
 Serve it on the local network only. The app speaks plain HTTP; a PIN or password travels unencrypted on the LAN, so do not reuse one used elsewhere, and never expose the port to the internet. Use *Allowed networks* to limit who can reach it. The app only reads from IoT Open; changes to the dashboard are made in the cloud.
+
+Whoever may write the installation's files in IoT Open chooses their content, so the app keeps only the kinds of file the dashboard reads (its JSON layout and images) and always serves them as a download of plain bytes (`application/octet-stream`, `Content-Disposition: attachment`) with a policy that lets nothing in them run (`Content-Security-Policy: default-src 'none'; sandbox`). An uploaded web page or script can therefore never run on the app's address, where it could otherwise use an unlocked PIN session.
 
 ## Development
 
